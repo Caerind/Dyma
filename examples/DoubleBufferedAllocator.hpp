@@ -40,6 +40,7 @@ public:
 		{
 			mCurrentBuffer = &mAllocatorA;
 		}
+		mCurrentBuffer->DeallocateAll();
 	}
 
 private:

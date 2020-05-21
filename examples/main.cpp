@@ -2,7 +2,14 @@
 
 #include <cassert> // assert
 
+// Some "extensions" examples to see what kind of allocators be made with the library
+#include "DebugAllocator.hpp"
+#include "DoubleBufferedAllocator.hpp"
+
 using namespace dyma;
+
+void DebugAllocator_Example();
+void DoubleBufferedAllocator_Example();
 
 int main()
 {
@@ -90,10 +97,59 @@ int main()
 	assert(memoryPtr == nullptr);
 	
 
+	DebugAllocator_Example();
+
+	DoubleBufferedAllocator_Example();
+
 
 
 	// Don't forget any deallocation :)
 	poolAllocator.Deallocate(poolValidBlock);
 
 	return 0;
+}
+
+void DebugAllocator_Example()
+{
+	// Init
+	bool debug = true;
+	dyma::StackMemory<1024> stackMemory;
+	dyma::StackAllocator stackAllocator(stackMemory);
+	DebugAllocator debugAllocator(stackAllocator);
+
+	// Use the allocator without knowing the magic behind
+	dyma::Allocator* allocator = (debug) ? (dyma::Allocator*)&debugAllocator : (dyma::Allocator*)&stackAllocator;
+	void* ptr8 = allocator->Allocate(8);
+	void* ptr16 = allocator->Allocate(16);
+	void* ptr32 = allocator->Allocate(32);
+	allocator->Deallocate(ptr32);
+
+	// Check the stats and find currently used blocks (and leaking blocks)
+	assert(debugAllocator.GetUsedSize() == 24);
+	assert(debugAllocator.GetPeakSize() == 56);
+	for (const DebugAllocator::DebugMemoryBlock& block : debugAllocator.GetBlocks())
+	{
+		assert((block.ptr == ptr8 && block.size == 8) || (block.ptr == ptr16 && block.size == 16));
+	}
+}
+
+
+void DoubleBufferedAllocator_Example()
+{
+	// Init
+	DoubleBufferedAllocator allocator(512);
+
+	for (std::size_t i = 0; i < 123; ++i)
+	{
+		// Allocate memory from the current buffer
+		void* ptr8 = allocator.Allocate(8);
+		void* ptr16 = allocator.Allocate(16);
+
+		// ..
+		// Simulation using current and/or previous buffer
+		// ..
+
+		// Swap the buffer and clear the new one
+		allocator.SwapBuffers();
+	}
 }

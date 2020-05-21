@@ -76,7 +76,7 @@ public:
 	std::size_t GetDeallocationCount() const { return mDeallocationCount; }
 	std::size_t GetUsedSize() const { return mUsedSize; }
 	std::size_t GetPeakSize() const { return mPeakSize; }
-	const std::vector<DebugMemoryBlock>& GetBlockSizes() const { return mBlocks; }
+	const std::vector<DebugMemoryBlock>& GetBlocks() const { return mBlocks; }
 
 private:
 	dyma::Allocator& mAllocator;
