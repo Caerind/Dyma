@@ -67,49 +67,6 @@ std::size_t RoundToAlignment(std::size_t size, std::size_t alignment)
 	return (size + (alignment - 1)) & -alignment;
 }
 
-MemoryBlock::MemoryBlock()
-	: ptr(nullptr)
-	, size(0)
-{
-}
-
-MemoryBlock::MemoryBlock(void* _ptr, std::size_t _size)
-	: ptr(_ptr)
-	, size(_size)
-{
-}
-
-bool MemoryBlock::IsValid() const
-{
-	return ptr != nullptr && size > 0;
-}
-
-void MemoryBlock::Reset()
-{
-	ptr = nullptr;
-	size = 0;
-}
-
-void* MemoryBlock::GetEndPointer()
-{
-	return reinterpret_cast<void*>(reinterpret_cast<std::uintptr_t>(ptr) + size);
-}
-
-const void* MemoryBlock::GetEndPointer() const
-{
-	return reinterpret_cast<const void*>(reinterpret_cast<std::uintptr_t>(ptr) + size);
-}
-
-bool MemoryBlock::operator==(const MemoryBlock& other) const
-{
-	return ptr == other.ptr && size == other.size;
-}
-
-bool MemoryBlock::operator!=(const MemoryBlock& other) const
-{
-	return !operator==(other);
-}
-
 const void* MemorySource::GetEndPointer() const
 {
 	return reinterpret_cast<const void*>(reinterpret_cast<std::uintptr_t>(GetPointer()) + GetSize());
@@ -118,16 +75,6 @@ const void* MemorySource::GetEndPointer() const
 bool MemorySource::Owns(const void* ptr) const
 {
 	return GetPointer() <= ptr && ptr < GetEndPointer();
-}
-
-bool MemorySource::Owns(const MemoryBlock& block) const
-{
-	return GetPointer() <= block.ptr && block.GetEndPointer() <= GetEndPointer();
-}
-
-MemoryBlock MemorySource::GetMemoryBlock() const
-{
-	return MemoryBlock((void*)GetPointer(), GetSize());
 }
 
 bool MemorySource::OwnsMemory() const
@@ -217,65 +164,60 @@ bool MemoryView::OwnsMemory() const
 	return false;
 }
 
-MemoryBlock NullAllocator::Allocate(std::size_t size)
+void* NullAllocator::Allocate(std::size_t size)
 {
-	return MemoryBlock();
+	return nullptr;
 }
 
-bool NullAllocator::Deallocate(MemoryBlock& block)
-{
-	return false;
-}
-
-bool NullAllocator::Owns(const MemoryBlock& block) const
+bool NullAllocator::Deallocate(void*& ptr)
 {
 	return false;
 }
 
-MemoryBlock ForbiddenAllocator::Allocate(std::size_t size)
+bool NullAllocator::Owns(const void* ptr) const
+{
+	return false;
+}
+
+void* ForbiddenAllocator::Allocate(std::size_t size)
 {
 	assert(false);
-	return MemoryBlock();
+	return nullptr;
 }
 
-bool ForbiddenAllocator::Deallocate(MemoryBlock& block)
+bool ForbiddenAllocator::Deallocate(void*& ptr)
 {
 	assert(false);
 	return false;
 }
 
-bool ForbiddenAllocator::Owns(const MemoryBlock& block) const
+bool ForbiddenAllocator::Owns(const void* ptr) const
 {
 	return false;
 }
 
-MemoryBlock Mallocator::Allocate(std::size_t size)
+void* Mallocator::Allocate(std::size_t size)
 {
-	MemoryBlock block;
+	void* ptr = nullptr;
 	if (size > 0)
 	{
-		block.ptr = Malloc(size);
-		if (block.ptr != nullptr)
-		{
-			block.size = size;
-		}
+		ptr = Malloc(size);
 	}
-	return block;
+	return ptr;
 }
 
-bool Mallocator::Deallocate(MemoryBlock& block)
+bool Mallocator::Deallocate(void*& ptr)
 {
-	if (block.ptr != nullptr)
+	if (ptr != nullptr)
 	{
-		Free(block.ptr);
-		block.ptr = nullptr;
-		block.size = 0;
+		Free(ptr);
+		ptr = nullptr;
 		return true;
 	}
 	return false;
 }
 
-bool Mallocator::Owns(const MemoryBlock& block) const
+bool Mallocator::Owns(const void* ptr) const
 {
 	return false;
 }
@@ -286,51 +228,33 @@ StackAllocator::StackAllocator(MemorySource& source)
 {
 }
 
-MemoryBlock StackAllocator::Allocate(std::size_t size)
+void* StackAllocator::Allocate(std::size_t size)
 {
-	MemoryBlock	block;
+	void* ptr = nullptr;
 	const std::size_t alignedSize = RoundToAlignment(size, GetAlignment());
 	if (size > 0 && alignedSize <= GetRemainingSize())
 	{
-		block.ptr = reinterpret_cast<void*>(mPointer);
-		if (block.ptr != nullptr)
-		{
-			block.size = size;
-		}
+		ptr = reinterpret_cast<void*>(mPointer);
 		mPointer += alignedSize;
 	}
-	return block;
+	return ptr;
 }
 
-bool StackAllocator::Deallocate(MemoryBlock& block)
+bool StackAllocator::Deallocate(void*& ptr)
 {
-	// Only the last allocated block can be released
-	const std::uintptr_t blockBytePtr = reinterpret_cast<std::uintptr_t>(block.ptr);
-	if (block.IsValid() && blockBytePtr + RoundToAlignment(block.size, GetAlignment()) == mPointer)
+	// You should only deallocate the last allocated block
+	if (ptr != nullptr)
 	{
-		mPointer = blockBytePtr;
-		block.Reset();
+		mPointer = reinterpret_cast<std::uintptr_t>(ptr);
+		ptr = nullptr;
 		return true;
 	}
 	return false;
 }
 
-bool StackAllocator::Owns(const MemoryBlock& block) const
+bool StackAllocator::Owns(const void* ptr) const
 {
-	return mSource.Owns(block) && reinterpret_cast<std::uintptr_t>(block.ptr) < mPointer;
-}
-
-MemoryBlock StackAllocator::AllocateAll()
-{
-	MemoryBlock block;
-	const std::size_t remainingSize = GetRemainingSize();
-	if (remainingSize > 0)
-	{
-		block.ptr = reinterpret_cast<void*>(mPointer);
-		block.size = remainingSize;
-		mPointer += remainingSize;
-	}
-	return block;
+	return mSource.Owns(ptr);
 }
 
 void StackAllocator::DeallocateAll()
@@ -377,35 +301,33 @@ PoolAllocator::PoolAllocator(MemorySource& source, std::size_t blockSize)
 	nodePtr->next = nullptr;
 }
 
-MemoryBlock PoolAllocator::Allocate(std::size_t size)
+void* PoolAllocator::Allocate(std::size_t size)
 {
-	MemoryBlock block;
+	void* ptr = nullptr;
 	if (size == mBlockSize && mRootNode != nullptr)
 	{
-		block.ptr = (void*)mRootNode;
-		block.size = mBlockSize;
+		ptr = (void*)mRootNode;
 		mRootNode = mRootNode->next;
 	}
-	return block;
+	return ptr;
 }
 
-bool PoolAllocator::Deallocate(MemoryBlock& block)
+bool PoolAllocator::Deallocate(void*& ptr)
 {
-	if (block.size == mBlockSize)
+	if (mSource.Owns(ptr))
 	{
-		Node* node = (Node*)block.ptr;
+		Node* node = (Node*)ptr;
 		node->next = mRootNode;
 		mRootNode = node;
-		block.ptr = nullptr;
-		block.size = 0;
+		ptr = nullptr;
 		return true;
 	}
 	return false;
 }
 
-bool PoolAllocator::Owns(const MemoryBlock& block) const
+bool PoolAllocator::Owns(const void* ptr) const
 {
-	return block.size == mBlockSize && mSource.Owns(block);
+	return mSource.Owns(ptr);
 }
 
 std::size_t PoolAllocator::GetBlockSize() const
@@ -429,31 +351,31 @@ FallbackAllocator::FallbackAllocator(Allocator& primaryAllocator, Allocator& sec
 {
 }
 
-MemoryBlock FallbackAllocator::Allocate(std::size_t size)
+void* FallbackAllocator::Allocate(std::size_t size)
 {
-	MemoryBlock	block = mPrimary.Allocate(size);
-	if (!block.IsValid())
+	void* ptr = mPrimary.Allocate(size);
+	if (ptr == nullptr)
 	{
-		block = mSecondary.Allocate(size);
+		ptr = mSecondary.Allocate(size);
 	}
-	return block;
+	return ptr;
 }
 
-bool FallbackAllocator::Deallocate(MemoryBlock& block)
+bool FallbackAllocator::Deallocate(void*& ptr)
 {
-	if (mPrimary.Owns(block))
+	if (mPrimary.Owns(ptr))
 	{
-		return mPrimary.Deallocate(block);
+		return mPrimary.Deallocate(ptr);
 	}
 	else
 	{
-		return mSecondary.Deallocate(block);
+		return mSecondary.Deallocate(ptr);
 	}
 }
 
-bool FallbackAllocator::Owns(const MemoryBlock& block) const
+bool FallbackAllocator::Owns(const void* ptr) const
 {
-	return mPrimary.Owns(block) || mSecondary.Owns(block);
+	return mPrimary.Owns(ptr) || mSecondary.Owns(ptr);
 }
 
 SegregatorAllocator::SegregatorAllocator(std::size_t threshold, Allocator& smaller, Allocator& larger)
@@ -463,7 +385,7 @@ SegregatorAllocator::SegregatorAllocator(std::size_t threshold, Allocator& small
 {
 }
 
-MemoryBlock SegregatorAllocator::Allocate(std::size_t size)
+void* SegregatorAllocator::Allocate(std::size_t size)
 {
 	if (size <= mThreshold)
 	{
@@ -475,28 +397,21 @@ MemoryBlock SegregatorAllocator::Allocate(std::size_t size)
 	}
 }
 
-bool SegregatorAllocator::Deallocate(MemoryBlock& block)
+bool SegregatorAllocator::Deallocate(void*& ptr)
 {
-	if (block.size <= mThreshold)
+	if (mSmallerAllocator.Owns(ptr))
 	{
-		return mSmallerAllocator.Deallocate(block);
+		return mSmallerAllocator.Deallocate(ptr);
 	}
 	else
 	{
-		return mLargerAllocator.Deallocate(block);
+		return mLargerAllocator.Deallocate(ptr);
 	}
 }
 
-bool SegregatorAllocator::Owns(const MemoryBlock& block) const
+bool SegregatorAllocator::Owns(const void* ptr) const
 {
-	if (block.size <= mThreshold)
-	{
-		return mSmallerAllocator.Owns(block);
-	}
-	else
-	{
-		return mLargerAllocator.Owns(block);
-	}
+	return mSmallerAllocator.Owns(ptr) || mLargerAllocator.Owns(ptr);
 }
 
 std::size_t SegregatorAllocator::GetThreshold() const

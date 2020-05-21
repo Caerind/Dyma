@@ -33,48 +33,42 @@ int main()
 
 	// NullAllocator : Does nothing
 	NullAllocator nullAllocator;
-	MemoryBlock nullBlock = nullAllocator.Allocate(10);
-	assert(!nullBlock.IsValid());
+	void* nullPtr = nullAllocator.Allocate(10);
+	assert(nullPtr == nullptr);
 
 	// ForbiddenAllocator : Assert on allocation/deallocation
 	ForbiddenAllocator forbiddenAllocator;
-	//MemoryBlock forbiddenBlock = forbiddenAllocator.Allocate(10);
+	//void* forbiddenPtr = forbiddenAllocator.Allocate(10);
 
 	// Mallocator : malloc/free
 	Mallocator mallocator;
-	MemoryBlock mallocatorBlock = mallocator.Allocate(10);
-	assert(mallocatorBlock.IsValid());
-	mallocator.Deallocate(mallocatorBlock);
-	assert(!mallocatorBlock.IsValid());
+	void* mallocatorPtr = mallocator.Allocate(10);
+	assert(mallocatorPtr != nullptr);
+	mallocator.Deallocate(mallocatorPtr);
+	assert(mallocatorPtr == nullptr);
 
 	// StackAllocator
 	StackAllocator stackAllocator(hMem);
-	MemoryBlock stackBlock = stackAllocator.Allocate(sizeof(unsigned int));
+	void* stackPtr = stackAllocator.Allocate(sizeof(unsigned int));
 
-	// MemoryBlock : ptr & size of the block
-	assert(stackBlock.ptr != nullptr);
-	assert(stackBlock.size == sizeof(unsigned int));
-	unsigned int* intPtr = reinterpret_cast<unsigned int*>(stackBlock.ptr);
-	*intPtr = 12345;
-
-	// You can know if a block belongs to an allocator with Owns
-	assert(!nullAllocator.Owns(stackBlock));
-	assert(stackAllocator.Owns(stackBlock));
+	// You can know if a ptr belongs to an allocator with Owns
+	assert(!nullAllocator.Owns(stackPtr));
+	assert(stackAllocator.Owns(stackPtr));
 
 	// Memory block are not smart, you should deallocate them by hand
 	// Deallocate return true/false depending on the block has been deallocated or not
 	// If it does, the block is cleaned to nullptr and size of 0
-	assert(stackBlock.IsValid());
-	assert(stackAllocator.Deallocate(stackBlock));
-	assert(!stackBlock.IsValid());
+	assert(stackPtr != nullptr);
+	assert(stackAllocator.Deallocate(stackPtr));
+	assert(stackPtr == nullptr);
 
-	// PoolAllocator : Can only allocate block of the given size
+	// PoolAllocator : Can only allocate ptr of the given size
 	PoolAllocator poolAllocator(saMem, 16);
 	assert(poolAllocator.GetBlockCount() == 64);
-	MemoryBlock poolValidBlock = poolAllocator.Allocate(16);
-	assert(poolValidBlock.IsValid());
-	MemoryBlock poolInvalidBlock = poolAllocator.Allocate(32);
-	assert(!poolInvalidBlock.IsValid());
+	void* poolValidBlock = poolAllocator.Allocate(16);
+	assert(poolValidBlock != nullptr);
+	void* poolInvalidBlock = poolAllocator.Allocate(32);
+	assert(poolInvalidBlock == nullptr);
 
 	// FallbackAllocator : Try the primary allocator, then the secondary if the primary failed
 	FallbackAllocator fallbackAllocator(stackAllocator, mallocator);
@@ -88,13 +82,18 @@ int main()
 
 	// All the allocators share the same interface : Allocator
 	Allocator* allocator = &segregatorAllocator;
-	MemoryBlock memoryBlock = allocator->Allocate(16);
-	assert(memoryBlock.IsValid());
-	assert(memoryBlock.size == 16);
-	assert(allocator->Owns(memoryBlock));
-	assert(allocator->Deallocate(memoryBlock));
-	assert(!allocator->Owns(memoryBlock));
-	assert(!memoryBlock.IsValid());
+	void* memoryPtr = allocator->Allocate(16);
+	assert(memoryPtr != nullptr);
+	assert(allocator->Owns(memoryPtr));
+	assert(allocator->Deallocate(memoryPtr));
+	assert(!allocator->Owns(memoryPtr));
+	assert(memoryPtr == nullptr);
+	
+
+
+
+	// Don't forget any deallocation :)
+	poolAllocator.Deallocate(poolValidBlock);
 
 	return 0;
 }

@@ -15,19 +15,19 @@ public:
 	{
 	}
 
-	dyma::MemoryBlock Allocate(std::size_t size) override
+	void* Allocate(std::size_t size) override
 	{
 		return mCurrentBuffer->Allocate(size);
 	}
 
-	bool Deallocate(dyma::MemoryBlock& block) override
+	bool Deallocate(void*& ptr) override
 	{
-		return mCurrentBuffer->Deallocate(block);
+		return mCurrentBuffer->Deallocate(ptr);
 	}
 
-	bool Owns(const dyma::MemoryBlock& block) const override 
+	bool Owns(const void* ptr) const override 
 	{
-		return mCurrentBuffer->Owns(block);
+		return mCurrentBuffer->Owns(ptr);
 	}
 
 	void SwapBuffers()

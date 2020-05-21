@@ -15,25 +15,6 @@ void* AlignedMalloc(std::size_t size, std::size_t alignment);
 void AlignedFree(void* ptr);
 std::size_t RoundToAlignment(std::size_t size, std::size_t alignment);
 
-// Memory block allocated from an allocator
-struct MemoryBlock
-{
-	MemoryBlock();
-	MemoryBlock(void* _ptr, std::size_t _size);
-
-	bool IsValid() const;
-	void Reset();
-
-	void* GetEndPointer();
-	const void* GetEndPointer() const;
-
-	bool operator==(const MemoryBlock& other) const;
-	bool operator!=(const MemoryBlock& other) const;
-
-	void* ptr;
-	std::size_t size;
-};
-
 // Memory source to feed an allocator with
 class MemorySource
 {
@@ -46,8 +27,6 @@ public:
 
 	virtual const void* GetEndPointer() const;
 	virtual bool Owns(const void* ptr) const;
-	virtual bool Owns(const MemoryBlock& block) const;
-	virtual MemoryBlock GetMemoryBlock() const;
 	virtual bool OwnsMemory() const;
 };
 
@@ -135,9 +114,9 @@ class Allocator
 public:
 	Allocator() = default;
 
-	virtual MemoryBlock Allocate(std::size_t size) = 0;
-	virtual bool Deallocate(MemoryBlock& block) = 0;
-	virtual bool Owns(const MemoryBlock& block) const = 0;
+	virtual void* Allocate(std::size_t size) = 0;
+	virtual bool Deallocate(void*& ptr) = 0;
+	virtual bool Owns(const void* ptr) const = 0;
 
 	// NonCopyable
 	Allocator(const Allocator& other) = delete;
@@ -150,9 +129,9 @@ class NullAllocator : public Allocator
 public:
 	NullAllocator() = default;
 
-	MemoryBlock Allocate(std::size_t size) override;
-	bool Deallocate(MemoryBlock& block) override;
-	bool Owns(const MemoryBlock& block) const override;
+	void* Allocate(std::size_t size) override;
+	bool Deallocate(void*& ptr) override;
+	bool Owns(const void* ptr) const override;
 };
 
 // Forbidden allocator : Every allocation/deallocation will assert()
@@ -161,9 +140,9 @@ class ForbiddenAllocator : public Allocator
 public:
 	ForbiddenAllocator() = default;
 
-	MemoryBlock Allocate(std::size_t size) override;
-	bool Deallocate(MemoryBlock& block) override;
-	bool Owns(const MemoryBlock& block) const override;
+	void* Allocate(std::size_t size) override;
+	bool Deallocate(void*& ptr) override;
+	bool Owns(const void* ptr) const override;
 };
 
 // Mallocator : Malloc/Free allocator
@@ -173,9 +152,9 @@ class Mallocator : public Allocator
 public:
 	Mallocator() = default;
 
-	MemoryBlock Allocate(std::size_t size) override;
-	bool Deallocate(MemoryBlock& block) override;
-	bool Owns(const MemoryBlock& block) const override;
+	void* Allocate(std::size_t size) override;
+	bool Deallocate(void*& ptr) override;
+	bool Owns(const void* ptr) const override;
 };
 
 // StackAllocator : Allocator with a stack mechanism
@@ -185,11 +164,10 @@ class StackAllocator : public Allocator
 public:
 	StackAllocator(MemorySource& source);
 
-	MemoryBlock Allocate(std::size_t size) override;
-	bool Deallocate(MemoryBlock& block) override;
-	bool Owns(const MemoryBlock& block) const override;
+	void* Allocate(std::size_t size) override;
+	bool Deallocate(void*& ptr) override;
+	bool Owns(const void* ptr) const override;
 
-	MemoryBlock AllocateAll();
 	void DeallocateAll();
 
 	std::size_t GetUsedSize() const;
@@ -209,9 +187,9 @@ class PoolAllocator : public Allocator
 public:
 	PoolAllocator(MemorySource& source, std::size_t blockSize);
 
-	MemoryBlock Allocate(std::size_t size) override;
-	bool Deallocate(MemoryBlock& block) override;
-	bool Owns(const MemoryBlock& block) const override;
+	void* Allocate(std::size_t size) override;
+	bool Deallocate(void*& ptr) override;
+	bool Owns(const void* ptr) const override;
 
 	std::size_t GetBlockSize() const;
 	std::size_t GetBlockCount() const;
@@ -234,9 +212,9 @@ class FallbackAllocator : public Allocator
 public:
 	FallbackAllocator(Allocator& primaryAllocator, Allocator& secondaryAllocator);
 
-	MemoryBlock Allocate(std::size_t size) override;
-	bool Deallocate(MemoryBlock& block) override;
-	bool Owns(const MemoryBlock& block) const override;
+	void* Allocate(std::size_t size) override;
+	bool Deallocate(void*& ptr) override;
+	bool Owns(const void* ptr) const override;
 
 protected:
 	Allocator& mPrimary;
@@ -249,9 +227,9 @@ class SegregatorAllocator : public Allocator
 public:
 	SegregatorAllocator(std::size_t threshold, Allocator& smaller, Allocator& larger);
 
-	MemoryBlock Allocate(std::size_t size) override;
-	bool Deallocate(MemoryBlock& block) override;
-	bool Owns(const MemoryBlock& block) const override;
+	void* Allocate(std::size_t size) override;
+	bool Deallocate(void*& ptr) override;
+	bool Owns(const void* ptr) const override;
 
 	std::size_t GetThreshold() const;
 

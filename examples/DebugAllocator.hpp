@@ -7,6 +7,12 @@
 class DebugAllocator : public dyma::Allocator
 {
 public:
+	struct DebugMemoryBlock
+	{
+		void* ptr;
+		std::size_t size;
+	};
+
 	DebugAllocator(dyma::Allocator& allocatorToDebug)
 		: mAllocator(allocatorToDebug)
 		, mAllocationCount(0)
@@ -16,44 +22,61 @@ public:
 	{
 	}
 
-	dyma::MemoryBlock Allocate(std::size_t size) override
+	void* Allocate(std::size_t size) override
 	{
-		dyma::MemoryBlock block = mAllocator.Allocate(size);
-		if (block.IsValid())
+		void* ptr = mAllocator.Allocate(size);
+		if (ptr != nullptr)
 		{
 			mAllocationCount++;
-			mUsedSize++;
+
+			DebugMemoryBlock block;
+			block.ptr = ptr;
+			block.size = size;
+			mBlocks.push_back(block);
+
+			mUsedSize += size;
 			if (mUsedSize > mPeakSize)
 			{
 				mPeakSize = mUsedSize;
 			}
-			mBlockSizes.push_back(size);
 		}
-		return block;
+		return ptr;
 	}
 
-	bool Deallocate(dyma::MemoryBlock& block) override
+	bool Deallocate(void*& ptr) override
 	{
-		const std::size_t blockSize = block.size;
-		const bool result = mAllocator.Deallocate(block);
+		const void* ptrBeforeDealloc = ptr;
+		const bool result = mAllocator.Deallocate(ptr);
 		if (result)
 		{
 			mDeallocationCount++;
-			mUsedSize -= blockSize;
+
+			std::size_t deallocationSize = 0;
+			const std::size_t blockCount = mBlocks.size();
+			for (std::size_t i = 0; i < blockCount; ++i)
+			{
+				if (ptrBeforeDealloc == mBlocks[i].ptr)
+				{
+					deallocationSize = mBlocks[i].size;
+					mBlocks.erase(mBlocks.begin() + i);
+				}
+			}
+
+			mUsedSize -= deallocationSize;
 		}
 		return result;
 	}
 
-	bool Owns(const dyma::MemoryBlock& block) const override 
+	bool Owns(const void* ptr) const override 
 	{
-		return mAllocator.Owns(block);
+		return mAllocator.Owns(ptr);
 	}
 
 	std::size_t GetAllocationCount() const { return mAllocationCount; }
 	std::size_t GetDeallocationCount() const { return mDeallocationCount; }
 	std::size_t GetUsedSize() const { return mUsedSize; }
 	std::size_t GetPeakSize() const { return mPeakSize; }
-	const std::vector<std::size_t> GetBlockSizes() const { return mBlockSizes; }
+	const std::vector<DebugMemoryBlock>& GetBlockSizes() const { return mBlocks; }
 
 private:
 	dyma::Allocator& mAllocator;
@@ -64,5 +87,5 @@ private:
 	std::size_t mUsedSize;
 	std::size_t mPeakSize;
 
-	std::vector<std::size_t> mBlockSizes;
+	std::vector<DebugMemoryBlock> mBlocks;
 };
